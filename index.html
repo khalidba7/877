@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>مزاد القادحات لمزاد الخيل</title>
+<style>
+    body {margin:0; font-family: Arial, sans-serif; background:#f5f5f5;}
+    .page {display:none; padding:20px; text-align:center;}
+    .active {display:block;}
+    h1, h2, h3 {color:#5a381e;}
+    button {background:#b8860b; color:#fff; padding:12px 20px; border:none; border-radius:8px; font-size:18px; cursor:pointer; margin:10px;}
+    button:hover {background:#8b6914;}
+    input, textarea {width:90%; padding:10px; margin:10px 0; border-radius:6px; border:1px solid #ccc; font-size:16px;}
+    .back-btn {background:#555;}
+    .horse-card {background:#fff; margin:10px auto; padding:10px; border-radius:8px; width:90%; box-shadow:0 0 5px rgba(0,0,0,0.1);}
+    .timer {color:red; font-weight:bold;}
+    .popup {display:none; position:fixed; z-index:1000; padding-top:50px; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8);}
+    .popup-content {background:#fff; margin:auto; padding:20px; border-radius:8px; width:90%; max-width:500px;}
+    .popup-content img, .popup-content video {max-width:100%; margin-bottom:10px; border-radius:6px;}
+</style>
+</head>
+<body>
+
+<div id="welcomePage" class="page active">
+    <h1>مرحبا بكم في مزاد القادحات لمزاد الخيل</h1>
+    <button onclick="showPage('registerPage')">ابدأ</button>
+</div>
+
+<div id="registerPage" class="page">
+    <h2>تسجيل المشترك</h2>
+    <input type="text" id="userName" placeholder="الاسم الثلاثي والقبيلة">
+    <input type="text" id="userPhone" placeholder="رقم الجوال">
+    <button onclick="saveUser()">متابعة</button>
+    <button class="back-btn" onclick="showPage('welcomePage')">رجوع</button>
+</div>
+
+<div id="addHorsePage" class="page">
+    <h2>إضافة خيل</h2>
+    <input type="text" id="horseName" placeholder="اسم الخيل">
+    <input type="text" id="horseAge" placeholder="العمر">
+    <input type="text" id="horseHealth" placeholder="الحالة الصحية">
+    <textarea id="horseDetails" placeholder="إنجازات الخيل وتفاصيله"></textarea>
+    <input type="number" id="horsePrice" placeholder="السعر المطلوب (لن يظهر بالمزاد)">
+    <input type="file" id="horseImages" multiple>
+    <input type="file" id="horsePassport">
+    <input type="file" id="horseVideo">
+    <button onclick="saveHorse()">حفظ</button>
+    <button class="back-btn" onclick="showPage('mainMenuPage')">رجوع</button>
+</div>
+
+<div id="mainMenuPage" class="page">
+    <h2>القائمة الرئيسية</h2>
+    <button onclick="showPage('auctionPage')">دخول المزاد</button>
+    <button onclick="showPage('addHorsePage')">إضافة خيل جديد</button>
+</div>
+
+<div id="auctionPage" class="page">
+    <h2>المزاد</h2>
+    <div id="auctionList"></div>
+    <button class="back-btn" onclick="showPage('mainMenuPage')">رجوع</button>
+</div>
+
+<div id="popup" class="popup" onclick="closePopup(event)">
+    <div class="popup-content" id="popupContent"></div>
+</div>
+
+<script>
+let horses = JSON.parse(localStorage.getItem('horses')) || [];
+
+function showPage(id){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if(id==='auctionPage') renderAuction();
+}
+
+function saveUser(){
+    localStorage.setItem('userName', document.getElementById('userName').value);
+    localStorage.setItem('userPhone', document.getElementById('userPhone').value);
+    showPage('addHorsePage');
+}
+
+function saveHorse(){
+    const horse = {
+        name: document.getElementById('horseName').value,
+        age: document.getElementById('horseAge').value,
+        health: document.getElementById('horseHealth').value,
+        details: document.getElementById('horseDetails').value,
+        price: parseFloat(document.getElementById('horsePrice').value) || 0,
+        owner: localStorage.getItem('userName'),
+        startTime: Date.now(),
+        highestBid: null,
+        highestBidder: null,
+        images: Array.from(document.getElementById('horseImages').files).map(f=>URL.createObjectURL(f)),
+        passport: document.getElementById('horsePassport').files[0] ? URL.createObjectURL(document.getElementById('horsePassport').files[0]) : null,
+        video: document.getElementById('horseVideo').files[0] ? URL.createObjectURL(document.getElementById('horseVideo').files[0]) : null
+    };
+    horses.push(horse);
+    localStorage.setItem('horses', JSON.stringify(horses));
+    alert('تم حفظ الخيل بنجاح');
+    showPage('mainMenuPage');
+}
+
+function renderAuction(){
+    const container=document.getElementById('auctionList');
+    container.innerHTML='';
+    horses.forEach((h,index)=>{
+        const card=document.createElement('div');
+        card.className='horse-card';
+        const timerId='timer-'+index;
+        card.innerHTML=`
+            <h3>${h.name}</h3>
+            <p>الحالة الصحية: ${h.health}</p>
+            <p>أعلى مزايد: ${h.highestBidder || 'لا يوجد'}</p>
+            <p class="timer" id="${timerId}"></p>
+            <button onclick="openPopup(${index})">عرض الصور والفيديو</button>
+            <input type="text" id="bidderName-${index}" placeholder="اسمك">
+            <input type="number" id="bidAmount-${index}" placeholder="قيمة المزايدة">
+            <button onclick="placeBid(${index})">مزايدة</button>
+        `;
+        container.appendChild(card);
+        startTimer(h.startTime, timerId);
+    });
+}
+
+function placeBid(index){
+    const name=document.getElementById(`bidderName-${index}`).value;
+    const amount=parseFloat(document.getElementById(`bidAmount-${index}`).value);
+    if(!name || !amount){
+        alert('أدخل اسمك وقيمة المزايدة');
+        return;
+    }
+    if(horses[index].highestBid===null){
+        if(amount < horses[index].price){
+            alert('المزايدة أقل من السعر المطلوب');
+            return;
+        }
+    } else {
+        if(amount <= horses[index].highestBid){
+            alert('يجب أن تكون المزايدة أعلى من المزايدة الحالية');
+            return;
+        }
+    }
+    horses[index].highestBid=amount;
+    horses[index].highestBidder=name;
+    localStorage.setItem('horses', JSON.stringify(horses));
+    renderAuction();
+}
+
+function startTimer(startTime, elementId){
+    function updateTimer(){
+        const now=Date.now();
+        const diff=24*60*60*1000 - (now - startTime);
+        if(diff<=0){
+            document.getElementById(elementId).innerText='انتهى المزاد';
+            return;
+        }
+        const hours=Math.floor(diff/(1000*60*60));
+        const minutes=Math.floor((diff%(1000*60*60))/(1000*60));
+        const seconds=Math.floor((diff%(1000*60))/1000);
+        document.getElementById(elementId).innerText=`${hours}:${minutes}:${seconds}`;
+        setTimeout(updateTimer,1000);
+    }
+    updateTimer();
+}
+
+function openPopup(index){
+    const horse=horses[index];
+    const popupContent=document.getElementById('popupContent');
+    popupContent.innerHTML='';
+    if(horse.images && horse.images.length>0){
+        horse.images.forEach(img=>{
+            const imageEl=document.createElement('img');
+            imageEl.src=img;
+            popupContent.appendChild(imageEl);
+        });
+    }
+    if(horse.passport){
+        const passportImg=document.createElement('img');
+        passportImg.src=horse.passport;
+        popupContent.appendChild(passportImg);
+    }
+    if(horse.video){
+        const videoEl=document.createElement('video');
+        videoEl.src=horse.video;
+        videoEl.controls=true;
+        popupContent.appendChild(videoEl);
+    }
+    document.getElementById('popup').style.display='block';
+}
+
+function closePopup(event){
+    if(event.target.id==='popup'){
+        document.getElementById('popup').style.display='none';
+    }
+}
+</script>
+
+</body>
+</html>
